@@ -1,5 +1,5 @@
 tornado
-couchdb>=0.8
+ibmcloudant
 pyyaml>=3.10
 pycountry>=1.5
 requests>=2.2

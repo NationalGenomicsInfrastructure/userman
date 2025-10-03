@@ -3,7 +3,6 @@
 import tornado.web
 
 from . import constants
-from . import settings
 from . import utils
 from .saver import DocumentSaver
 from .requesthandler import RequestHandler

@@ -9,7 +9,7 @@ except IOError:
     install_requires = []
 
 setup(name='userman',
-      version='14.7',
+      version='14.8.0',
       description='Simple account handling system for use with web services.',
       license='MIT',
       author='Per Kraulis',

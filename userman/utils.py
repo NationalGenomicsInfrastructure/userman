@@ -9,12 +9,98 @@ import hashlib
 import datetime
 import unicodedata
 
-import tornado.web
-import couchdb
+from ibmcloudant import CouchDbSessionAuthenticator, cloudant_v1
+import ibm_cloud_sdk_core
 import yaml
 
 from userman import constants
 from userman import settings
+
+class CloudantDatabaseWrapper:
+    # Wrap a CloudantV1 client to provide a minimal CouchDB-like database interface.
+    def __init__(self, client, db_name):
+        self.client = client
+        self.db_name = db_name
+    
+    def __getitem__(self, doc_id):
+        """Mimics db['doc_id']"""
+        response = self.client.get_document(
+            db=self.db_name,
+            doc_id=doc_id
+        ).get_result()
+        return response
+    
+    def __iter__(self):
+        """Make the database wrapper iterable by document IDs"""
+        try:
+            # Get all document IDs using _all_docs view
+            response = self.client.post_all_docs(
+                db=self.db_name,
+                include_docs=False  # Only get IDs, not full documents
+            ).get_result()
+            
+            for row in response.get('rows', []):
+                yield row['id']
+        except Exception as e:
+            logging.error(f"Error iterating database: {e}")
+            return
+    
+    def view(self, viewname, **options):
+        """Mimics db.view(...)"""
+        ddoc, view = viewname.split('/')
+        response = self.client.post_view(
+            db=self.db_name,
+            ddoc=ddoc,
+            view=view,
+            **options
+        ).get_result()
+        return response.get('rows', [])
+    
+    def save(self, document):
+        """Mimics db.save(doc)"""
+        if '_id' in document:
+            doc_id = document['_id']
+        else:
+            doc_id = uuid.uuid4().hex
+            document['_id'] = doc_id
+        response = self.client.put_document(
+            db=self.db_name,
+            doc_id=doc_id,
+            document=document
+        ).get_result()
+        return response
+    
+    def delete(self, document):
+        """Mimics db.delete(doc)"""
+        if '_id' not in document or '_rev' not in document:
+            raise ValueError("Document must have '_id' and '_rev' to be deleted")
+        response = self.client.delete_document(
+            db=self.db_name,
+            doc_id=document['_id'],
+            rev=document['_rev']
+        ).get_result()
+        return response
+
+    def get_attachment(self, doc_id, attachment_name):
+        """Get an attachment from a document."""
+        response = self.client.get_attachment(
+            db=self.db_name,
+            doc_id=doc_id,
+            attachment_name=attachment_name
+        ).get_result()
+        return response
+    
+    def put_attachment(self, doc_id, data, attachment_name, content_type, rev):
+        """Put an attachment to a document."""
+        response = self.client.put_attachment(
+            db=self.db_name,
+            doc_id=doc_id,
+            attachment=data,
+            attachment_name=attachment_name,
+            content_type=content_type,
+            rev=rev
+        ).get_result()
+        return response
 
 
 def load_settings(filepath=None):
@@ -76,7 +162,7 @@ def load_settings(filepath=None):
         if not os.path.isabs(settings[key]):
             settings[key] = os.path.join(basedir, settings[key])
     # Settings computable from others
-    settings['DB_SERVER_VERSION'] = couchdb.Server(settings['DB_SERVER']).version()
+    settings['DB_SERVER_VERSION'] = get_couchdb_client().get_server_information().get_result().get("version")
     if 'PORT' not in settings:
         parts = urllib.parse.urlparse(settings['BASE_URL'])
         items = parts.netloc.split(':')
@@ -89,11 +175,24 @@ def load_settings(filepath=None):
         else:
             raise ValueError('could not determine port from BASE_URL')
 
+def get_couchdb_client():
+    "Return the handle for the CouchDB server."
+    try:
+        cloudant = cloudant_v1.CloudantV1(
+            authenticator=CouchDbSessionAuthenticator(
+                settings.get("DB_USERNAME"), settings.get("DB_PASSWORD")
+            )
+        )
+        cloudant.set_service_url(settings.get("DB_SERVER"))
+        return cloudant
+    except Exception as e:
+        raise KeyError("Could not connect to CouchDB server: %s" % str(e))
+
 def get_db():
     "Return the handle for the CouchDB database."
     try:
-        return couchdb.Server(settings['DB_SERVER'])[settings['DB_DATABASE']]
-    except couchdb.http.ResourceNotFound:
+        return CloudantDatabaseWrapper(get_couchdb_client(), settings['DB_DATABASE'])
+    except ibm_cloud_sdk_core.api_exception.ApiException:
         raise KeyError("CouchDB database '%s' does not exist" %
                        settings['DB_DATABASE'])
 
@@ -106,10 +205,10 @@ def get_user_doc(db, name):
     # else 'name' is the username for the account
     else:
         viewname = 'user/username'
-    result = list(db.view(viewname, include_docs=True)[name])
+    result = list(db.view(viewname, include_docs=True, key=name))
     if len(result) != 1:
         raise ValueError("no such user account '{0}'".format(name))
-    return result[0].doc
+    return result[0]['doc']
 
 def get_iuid():
     "Return a unique instance identifier."

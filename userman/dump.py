@@ -29,7 +29,7 @@ def dump(db, filename):
         info.size = len(data)
         outfile.addfile(info, StringIO(data))
         count_items += 1
-        for attname in doc.get('_attachments', dict()):
+        for attname in doc.get('_attachments',{}):
             info = tarfile.TarInfo("{0}_att/{1}".format(doc['_id'], attname))
             attfile = db.get_attachment(doc, attname)
             data = attfile.read()
@@ -66,8 +66,9 @@ def undump(db, filename):
             count_items += 1
             for attname, attinfo in list(atts.items()):
                 key = "{0}_att/{1}".format(doc['_id'], attname)
-                attachments[key] = dict(filename=attname,
-                                        content_type=attinfo['content_type'])
+                attachments[key] = dict(attachment_name=attname,
+                                        content_type=attinfo['content_type'],
+                                        rev=doc['_rev'])
     infile.close()
     return count_items, count_files
 

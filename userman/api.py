@@ -4,9 +4,8 @@ import logging
 import json
 
 import tornado.web
-import couchdb
+import ibm_cloud_sdk_core
 
-from . import constants
 from . import settings
 from . import utils
 from .requesthandler import RequestHandler
@@ -41,7 +40,7 @@ class ApiDoc(ApiRequestHandler):
     def get(self, iuid):
         try:
             doc = self.db[iuid]
-        except couchdb.http.ResourceNotFound:
+        except ibm_cloud_sdk_core.api_exception.ApiException:
             self.send_error(404, reason='no such item')
         else:
             # Remove sensitive or irrelevant items

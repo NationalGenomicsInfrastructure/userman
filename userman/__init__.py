@@ -1,9 +1,9 @@
 """ Userman: Simple account handling system for use with web services.
 
-This implementation uses Tornado (3.2 or later) and CouchDB (1.0.1 or later).
+This implementation uses Tornado (3.2 or later) and ibmcloudant (0.10.7 or later).
 """
 
-__version__ = '14.7'
+__version__ = '14.8.0'
 
 # These values are minimal default values appropriate for debugging.
 # The actual values are read in by utils.load_settings()

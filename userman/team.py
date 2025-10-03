@@ -4,7 +4,6 @@ import tornado.web
 import functools
 
 from . import constants
-from . import settings
 from . import utils
 from .saver import DocumentSaver
 from .requesthandler import RequestHandler
@@ -34,8 +33,8 @@ class TeamMixin(object):
                       key=functools.cmp_to_key(utils.cmp_email))
 
     def get_members(self, team):
-        return sorted([self.get_user(r.value)
-                       for r in self.db.view('user/team')[team['name']]],
+        return sorted([self.get_user(r['value'])
+                       for r in self.db.view('user/team', key=team['name'])],
                       key=functools.cmp_to_key(utils.cmp_email))
 
     def is_member(self, team, user=None):
@@ -132,7 +131,7 @@ class TeamEdit(TeamMixin, RequestHandler):
             saver['status'] = self.get_argument('status', team['status'])
             saver['public'] = utils.to_bool(self.get_argument(
                     'public', team.get('public', False)))
-        old_members = set([r.value for r in self.db.view('user/team')[name]])
+        old_members = set([r['value'] for r in self.db.view('user/team', key=name)])
         new_members = set()
         for email in self.get_argument('members').split():
             try:
@@ -160,7 +159,7 @@ class Teams(TeamMixin, RequestHandler):
 
     @tornado.web.authenticated
     def get(self):
-        teams = [r.doc for r in
+        teams = [r['doc'] for r in
                  self.db.view('team/name', include_docs=True)]
         for team in teams:
             team['is_member'] = self.is_member(team)

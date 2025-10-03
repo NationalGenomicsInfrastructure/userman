@@ -1,11 +1,9 @@
 " Userman: User handlers. "
 
-import json
 import logging
 
 import tornado.web
 import pycountry
-import requests
 
 from . import constants
 from . import settings
@@ -37,7 +35,7 @@ class UserSaver(DocumentSaver):
             raise ValueError("at-sign '@' not used correcly in email")
         if len(parts[1].split('.')) < 2:
             raise ValueError('invalid domain name part in email')
-        if len(list(self.db.view('user/email')[value])) > 0:
+        if len(list(self.db.view('user/email', key=value))) > 0:
             raise KeyError("email already in use")
 
     def check_username(self, value):
@@ -49,7 +47,7 @@ class UserSaver(DocumentSaver):
             raise ValueError("slash '/' disallowed in username")
         if '@' in value:
             raise ValueError("at-sign '@' disallowed in username")
-        if len(list(self.db.view('user/username')[value])) > 0:
+        if len(list(self.db.view('user/username', key=value))) > 0:
             raise KeyError('username already in use')
 
     def convert_email(self, value):
@@ -183,7 +181,7 @@ class UserCreate(UserApproveMixin, RequestHandler):
             saver['department'] = self.get_argument('department', None)
             saver['university'] = self.get_argument('university', None)
             saver['country'] = self.get_argument('country')
-            saver['services'] = [r.key for r in self.db.view('service/public')]
+            saver['services'] = [r['key'] for r in self.db.view('service/public')]
             user = saver.doc
         if self.is_admin(): # Activate immediately if admin creator is admin.
             self.approve_user(user)
@@ -342,7 +340,7 @@ class Users(RequestHandler):
     @tornado.web.authenticated
     def get(self):
         self.check_admin()
-        users = [r.doc for r in self.db.view('user/email', include_docs=True)]
+        users = [r['doc'] for r in self.db.view('user/email', include_docs=True)]
         self.render('users.html', users=users)
 
 
@@ -352,7 +350,7 @@ class UsersPending(RequestHandler):
     @tornado.web.authenticated
     def get(self):
         self.check_admin()
-        users = [r.doc for r in self.db.view('user/pending', include_docs=True)]
+        users = [r['doc'] for r in self.db.view('user/pending', include_docs=True)]
         self.render('users_pending.html', users=users)
 
 
@@ -362,5 +360,5 @@ class UsersBlocked(RequestHandler):
     @tornado.web.authenticated
     def get(self):
         self.check_admin()
-        users = [r.doc for r in self.db.view('user/blocked', include_docs=True)]
+        users = [r['doc'] for r in self.db.view('user/blocked', include_docs=True)]
         self.render('users_blocked.html', users=users)

@@ -20,11 +20,11 @@ from userman.dump import undump
 def wipeout_database(db):
     "Wipe out the contents of the database."
     for doc in db:
-        del db[doc]
+        db.delete(doc)
 
 def create_user_admin(db):
     "Create an admin user, if it does not already exist."
-    if len(db.view('user/role')['admin']) > 0:
+    if len(db.view('user/role', key='admin')) > 0:
         return 'admin user exists'
     email = input('admin email (required) > ')
     if not email:

@@ -4,7 +4,9 @@ import logging
 
 import tornado
 import tornado.web
-import couchdb
+import ibmcloudant
+
+from importlib.metadata import version
 
 import userman
 from userman import settings
@@ -32,8 +34,8 @@ class Home(RequestHandler):
             teams = [self.get_team(n) for n in self.current_user['teams']]
             if self.is_admin():
                 try:
-                    view = self.db.view('user/count')
-                    pending_count = view['pending'].rows[0].value
+                    view_rows = self.db.view('user/count', key='pending')
+                    pending_count = view_rows[0]['value']
                 except IndexError:
                     pass
         self.render('home.html',
@@ -51,7 +53,7 @@ class Version(RequestHandler):
         versions = [('Userman', userman.__version__),
                     ('tornado', tornado.version),
                     ('CouchDB server', settings['DB_SERVER_VERSION']),
-                    ('CouchDB module', couchdb.__version__)]
+                    ('CouchDB module', version('ibmcloudant'))]
         self.render('version.html', versions=versions)
 
 

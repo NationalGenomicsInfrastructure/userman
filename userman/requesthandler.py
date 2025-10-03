@@ -2,13 +2,12 @@
 
 import logging
 import urllib.parse
-import weakref
 import smtplib
 from email.mime.text import MIMEText
 import functools
 
 import tornado.web
-import couchdb
+import ibm_cloud_sdk_core
 
 import userman
 from . import settings
@@ -21,7 +20,10 @@ class RequestHandler(tornado.web.RequestHandler):
 
     def prepare(self):
         self.db = utils.get_db()
-        self._cache = weakref.WeakValueDictionary()
+        self._cache = {}
+
+    def on_finish(self):
+        self._cache.clear()
 
     def get_template_namespace(self):
         result = super(RequestHandler, self).get_template_namespace()
@@ -74,7 +76,7 @@ class RequestHandler(tornado.web.RequestHandler):
                 doc = utils.get_user_doc(self.db, name)
             except ValueError as msg:
                 raise tornado.web.HTTPError(404, reason=str(msg))
-            self._cache[doc.id] = doc
+            self._cache[doc['_id']] = doc
             key = "{0}:{1}".format(constants.USER, doc['email'])
             self._cache[key] = doc
             if doc.get('username'):
@@ -90,15 +92,15 @@ class RequestHandler(tornado.web.RequestHandler):
             key = "{0}:{1}".format(constants.SERVICE, name)
             return self._cache[key]
         except KeyError:
-            result = list(self.db.view('service/name', include_docs=True)[name])
+            result = list(self.db.view('service/name', include_docs=True, key=name))
             if len(result) == 1:
-                doc = result[0].doc
-                self._cache[key] = self._cache[doc.id] = doc
+                doc = result[0]['doc']
+                self._cache[key] = self._cache[doc['_id']] = doc
                 return doc
             raise tornado.web.HTTPError(404, reason='no such service')
 
     def get_all_services(self):
-        return [self.get_service(r.key) for r in self.db.view('service/name')]
+        return [self.get_service(r['key']) for r in self.db.view('service/name')]
 
     def get_team(self, name):
         "Get the team document by its name."
@@ -106,10 +108,10 @@ class RequestHandler(tornado.web.RequestHandler):
             key = "{0}:{1}".format(constants.SERVICE, name)
             return self._cache[key]
         except KeyError:
-            result = list(self.db.view('team/name', include_docs=True)[name])
+            result = list(self.db.view('team/name', include_docs=True, key=name))
             if len(result) == 1:
-                doc = result[0].doc
-                self._cache[key] = self._cache[doc.id] = doc
+                doc = result[0]['doc']
+                self._cache[key] = self._cache[doc["_id"]] = doc
                 return doc
             raise tornado.web.HTTPError(404, reason='no such team')
 
@@ -125,8 +127,8 @@ class RequestHandler(tornado.web.RequestHandler):
 
     def get_admins(self):
         "Return all admin accounts as a list of documents."
-        view = self.db.view('user/role', include_docs=True)
-        return [r.doc for r in view['admin'] if r.doc['status'] == 'active']
+        view_rows = self.db.view('user/role', include_docs=True, key='admin')
+        return [r['doc'] for r in view_rows if r['doc']['status'] == 'active']
 
     def get_doc(self, id, doctype=None):
         "Return the document given by its id, optionally checking the doctype."
@@ -141,13 +143,13 @@ class RequestHandler(tornado.web.RequestHandler):
                         raise ValueError(msg)
                 self._cache[id] = doc
                 return doc
-            except couchdb.ResourceNotFound:
+            except ibm_cloud_sdk_core.api_exception.ApiException:
                 raise ValueError('no such document')
 
     def get_logs(self, id):
         "Return the log documents for the given doc id."
-        view = self.db.view('log/doc', include_docs=True)
-        return sorted([r.doc for r in view[id]],
+        view_rows = self.db.view('log/doc', include_docs=True, key=id)
+        return sorted([r['doc'] for r in view_rows],
                       key=functools.cmp_to_key(utils.cmp_modified),
                       reverse=True)
 
